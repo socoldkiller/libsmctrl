@@ -10,3 +10,5 @@ libsmctrl_test_next_mask_override
 *.pyc
 *.o
 .gdb_history
+build
+.cache

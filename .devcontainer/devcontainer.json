@@ -1,0 +1,30 @@
+{
+  "name": "libsmctrl Dev Container",
+  "build": {
+    "dockerfile": "../Dockerfile"
+  },
+  "runArgs": [
+    "--gpus=all",
+    "-it",
+    "--pid",
+    "host",
+    "--privileged",
+    "--entrypoint",
+    "/bin/bash"
+  ],
+  "mounts": [
+  //  "source=/proc,target=/proc,type=bind",
+    "source=./,target=/workspace,type=bind"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "ms-python.python",
+        "llvm-vs-code-extensions.vscode-clangd"
+      ]
+    }
+  }
+}
