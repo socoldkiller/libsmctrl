@@ -12,3 +12,7 @@ libsmctrl_test_next_mask_override
 .gdb_history
 build
 .cache
+gpu_snapshots_*
+
+build
+.cache

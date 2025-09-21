@@ -26,19 +26,59 @@
 #include <cuda.h>
 
 #include <errno.h>
-#include <error.h>
-#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+
+// Platform detection
+#if defined(_WIN32) || defined(_WIN64)
+#define LIB_SMCTRL_WINDOWS 1
+#include <windows.h>
+#include <fileapi.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+#else
+#define LIB_SMCTRL_LINUX 1
+#include <error.h>
+#include <fcntl.h>
 #include <unistd.h>
+#endif
 
 #include "libsmctrl.h"
 
+// Cross-platform popcount implementation
+#ifdef LIB_SMCTRL_WINDOWS
+#include <intrin.h>
+static inline int popcount64(uint64_t x) {
+    return __popcnt64(x);
+}
+#else
+static inline int popcount64(uint64_t x) {
+    return __builtin_popcountl(x);
+}
+#endif
+
 // In functions that do not return an error code, we favor terminating with an
 // error rather than merely printing a warning and continuing.
+#ifdef LIB_SMCTRL_WINDOWS
+static void win_abort(int ret, int err, const char* file, int line, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stderr, "%s:%d: ", file, line);
+    vfprintf(stderr, fmt, args);
+    if (err) {
+        fprintf(stderr, ": %s", strerror(err));
+    }
+    fprintf(stderr, "\n");
+    va_end(args);
+    exit(ret);
+}
+#define abort(ret, errno, ...) win_abort(ret, errno, __FILE__, __LINE__, __VA_ARGS__)
+#else
 #define abort(ret, errno, ...) error_at_line(ret, errno, __FILE__, __LINE__, \
                                              __VA_ARGS__)
+#endif
 
 /*** QMD/TMD-based SM Mask Control via Debug Callback. ***/
 
@@ -55,7 +95,11 @@ static const CUuuid callback_funcs_id = {0x2c, (char)0x8e, 0x0a, (char)0xd8, 0x0
 // Global mask (applies across all threads)
 static uint64_t g_sm_mask = 0;
 // Next mask (applies per-thread)
+#ifdef LIB_SMCTRL_WINDOWS
+static __declspec(thread) uint64_t g_next_sm_mask = 0;
+#else
 static __thread uint64_t g_next_sm_mask = 0;
+#endif
 // Flag value to indicate if setup has been completed
 static bool sm_control_setup_called = false;
 
@@ -408,19 +452,95 @@ void libsmctrl_set_stream_mask_ext(void* stream, uint128_t mask) {
 
 /* INFORMATIONAL FUNCTIONS */
 
-// Read an integer from a file in `/proc`
-static int read_int_procfile(char* filename, uint64_t* out) {
+// Track created symlinks for cleanup
+static int symlinks_created[16] = {0};
+
+// Function to setup symbolic links from /proc/gpu%d to ./gpu%d
+static int setup_gpu_symlinks(int dev) {
+#ifdef LIB_SMCTRL_WINDOWS
+	// Windows doesn't support symlinks in the same way
+	return ENOSYS;
+#else
+	char proc_path[100];
+	char local_path[100];
+	
+	// Create symlink for the GPU directory
+	snprintf(proc_path, 100, "/proc/gpu%d", dev);
+	snprintf(local_path, 100, "gpu%d", dev);
+	
+	// Remove existing symlink if it exists
+	unlink(local_path);
+	
+	// Create the symlink
+	if (symlink(proc_path, local_path) == -1) {
+		return errno;
+	}
+	
+	// Mark this symlink as created
+	if (dev >= 0 && dev < 16) {
+		symlinks_created[dev] = 1;
+	}
+	
+	return 0;
+#endif
+}
+
+// Function to cleanup symbolic links
+static void cleanup_gpu_symlinks() {
+#ifdef LIB_SMCTRL_WINDOWS
+	// Windows doesn't support symlinks in the same way
+	return;
+#else
+	char local_path[100];
+	
+	for (int dev = 0; dev < 16; dev++) {
+		if (symlinks_created[dev]) {
+			snprintf(local_path, 100, "gpu%d", dev);
+			unlink(local_path);
+			symlinks_created[dev] = 0;
+		}
+	}
+#endif
+}
+
+
+static int read_gpu_info_file(int dev, const char* info_type, uint64_t* out) {
+	char filename[100];
+	// Use the symlink in current directory instead of /proc directly
+	snprintf(filename, 100, "gpu%d/%s", dev, info_type);
+	
 	char f_data[18] = {0};
-	size_t ret;
-	int fd = open(filename, O_RDONLY);
-	if (fd == -1)
+	FILE* file = fopen(filename, "r");
+	if (file == NULL)
 		return errno;
-	ret = read(fd, f_data, 18);
-	if (ret == -1)
+	size_t ret = fread(f_data, 1, 18, file);
+	if (ret == 0 && ferror(file)) {
+		fclose(file);
 		return errno;
-	close(fd);
+	}
+	fclose(file);
 	*out = strtoll(f_data, NULL, 16);
 	return 0;
+}
+
+// High-level abstraction for reading GPU information
+static int read_gpu_info(int dev, const char* info_type, uint64_t* out) {
+#ifdef LIB_SMCTRL_WINDOWS
+	// Windows implementation - currently not supported
+	// TODO: Implement Windows-specific GPU info retrieval using NVAPI or other methods
+	return ENOSYS;
+#else
+	// Linux implementation using symlinks in current directory
+	// First, setup the symlink if it doesn't exist
+	if (access("gpu0", F_OK) == -1) {
+		int res = setup_gpu_symlinks(dev);
+		if (res != 0) {
+			return res;
+		}
+	}
+	return read_gpu_info_file(dev, info_type, out);
+
+#endif
 }
 
 // We support up to 64 TPCs, up to 12 GPCs per GPU, and up to 16 GPUs.
@@ -433,9 +553,9 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 	int err;
 	char filename[100];
 	*num_enabled_gpcs = 0;
-	// Maximum number of GPCs supported for this chip
-	snprintf(filename, 100, "/proc/gpu%d/num_gpcs", dev);
-	if (err = read_int_procfile(filename, &max_gpcs)) {
+	
+	// Use the high-level abstraction for reading GPU information
+	if (err = read_gpu_info(dev, "num_gpcs", &max_gpcs)) {
 		fprintf(stderr, "libsmctrl: nvdebug module must be loaded into kernel before "
 				"using libsmctrl_get_*_info() functions\n");
 		return err;
@@ -446,11 +566,9 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 		return ERANGE;
 	}
 	// Set bit = disabled GPC
-	snprintf(filename, 100, "/proc/gpu%d/gpc_mask", dev);
-	if (err = read_int_procfile(filename, &gpc_mask))
+	if (err = read_gpu_info(dev, "gpc_mask", &gpc_mask))
 		return err;
-	snprintf(filename, 100, "/proc/gpu%d/num_tpc_per_gpc", dev);
-	if (err = read_int_procfile(filename, &num_tpc_per_gpc))
+	if (err = read_gpu_info(dev, "num_tpc_per_gpc", &num_tpc_per_gpc))
 		return err;
 	// For each enabled GPC
 	for (i = 0; i < max_gpcs; i++) {
@@ -460,8 +578,8 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 		(*num_enabled_gpcs)++;
 		// Get the bitstring of TPCs disabled for this GPC
 		// Set bit = disabled TPC
-		snprintf(filename, 100, "/proc/gpu%d/gpc%d_tpc_mask", dev, i);
-		if (err = read_int_procfile(filename, &gpc_tpc_mask))
+		snprintf(filename, 100, "gpc%d_tpc_mask", i);
+		if (err = read_gpu_info(dev, filename, &gpc_tpc_mask))
 			return err;
 		uint64_t* tpc_mask = &tpc_mask_per_gpc_per_dev[dev][*num_enabled_gpcs - 1];
 		*tpc_mask = 0;
@@ -485,7 +603,7 @@ int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev) {
 		return res;
 	*num_tpcs = 0;
 	for (int gpc = 0; gpc < num_gpcs; gpc++) {
-		*num_tpcs += __builtin_popcountl(tpcs_per_gpc[gpc]);
+		*num_tpcs += popcount64(tpcs_per_gpc[gpc]);
 	}
 	return 0;
 }
@@ -526,3 +644,13 @@ abort_cuda:
 	return EIO;
 }
 
+// Cleanup function to remove symbolic links created by the library
+void libsmctrl_cleanup_symlinks() {
+	cleanup_gpu_symlinks();
+}
+
+// Register cleanup function to run at program exit
+__attribute__((constructor))
+static void register_cleanup() {
+	atexit(libsmctrl_cleanup_symlinks);
+}

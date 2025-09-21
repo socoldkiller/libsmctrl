@@ -71,6 +71,9 @@ extern int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev);
 // Identical to above, but for a CUDA device ID. Does not require `nvdebug`.
 extern int libsmctrl_get_tpc_info_cuda(uint32_t* num_tpcs, int cuda_dev);
 
+// Cleanup function to remove symbolic links created by the library
+extern void libsmctrl_cleanup_symlinks();
+
 #ifdef __cplusplus
 }
 #endif
