@@ -553,7 +553,7 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 	*num_enabled_gpcs = 0;
 	
 	// Use the high-level abstraction for reading GPU information
-	if (err = read_gpu_info(dev, "num_gpcs", &max_gpcs)) {
+	if ((err = read_gpu_info(dev, "num_gpcs", &max_gpcs))) {
 		fprintf(stderr, "libsmctrl: nvdebug module must be loaded into kernel before "
 				"using libsmctrl_get_*_info() functions\n");
 		return err;
@@ -564,9 +564,9 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 		return ERANGE;
 	}
 	// Set bit = disabled GPC
-	if (err = read_gpu_info(dev, "gpc_mask", &gpc_mask))
+	if ((err = read_gpu_info(dev, "gpc_mask", &gpc_mask)))
 		return err;
-	if (err = read_gpu_info(dev, "num_tpc_per_gpc", &num_tpc_per_gpc))
+	if ((err = read_gpu_info(dev, "num_tpc_per_gpc", &num_tpc_per_gpc)))
 		return err;
 	// For each enabled GPC
 	for (i = 0; i < max_gpcs; i++) {
@@ -577,7 +577,7 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 		// Get the bitstring of TPCs disabled for this GPC
 		// Set bit = disabled TPC
 		snprintf(filename, 100, "gpc%d_tpc_mask", i);
-		if (err = read_gpu_info(dev, filename, &gpc_tpc_mask))
+		if ((err = read_gpu_info(dev, filename, &gpc_tpc_mask)))
 			return err;
 		uint64_t* tpc_mask = &tpc_mask_per_gpc_per_dev[dev][*num_enabled_gpcs - 1];
 		*tpc_mask = 0;
@@ -597,7 +597,7 @@ int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev) {
 	uint32_t num_gpcs;
 	uint64_t* tpcs_per_gpc;
 	int res;
-	if (res = libsmctrl_get_gpc_info(&num_gpcs, &tpcs_per_gpc, dev))
+	if ((res = libsmctrl_get_gpc_info(&num_gpcs, &tpcs_per_gpc, dev)))
 		return res;
 	*num_tpcs = 0;
 	for (int gpc = 0; gpc < num_gpcs; gpc++) {
@@ -611,13 +611,13 @@ int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev) {
 int libsmctrl_get_tpc_info_cuda(uint32_t* num_tpcs, int cuda_dev) {
 	int num_sms, major, minor, res = 0;
 	const char* err_str;
-	if (res = cuInit(0))
+	if ((res = cuInit(0)))
 		goto abort_cuda;
-	if (res = cuDeviceGetAttribute(&num_sms, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, cuda_dev))
+	if ((res = cuDeviceGetAttribute(&num_sms, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, cuda_dev)))
 		goto abort_cuda;
-	if (res = cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, cuda_dev))
+	if ((res = cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, cuda_dev)))
 		goto abort_cuda;
-	if (res = cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cuda_dev))
+	if ((res = cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cuda_dev)))
 		goto abort_cuda;
 	// SM masking only works on sm_35+
 	if (major < 3 || (major == 3 && minor < 5))
