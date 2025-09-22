@@ -13,6 +13,4 @@ libsmctrl_test_next_mask_override
 build
 .cache
 gpu_snapshots_*
-
-build
-.cache
+.idea
