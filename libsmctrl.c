@@ -47,19 +47,6 @@
 #endif
 
 #include "libsmctrl.h"
-
-// Cross-platform popcount implementation
-#ifdef LIB_SMCTRL_WINDOWS
-#include <intrin.h>
-static inline int popcount64(uint64_t x) {
-    return __popcnt64(x);
-}
-#else
-static inline int popcount64(uint64_t x) {
-    return __builtin_popcountl(x);
-}
-#endif
-
 // In functions that do not return an error code, we favor terminating with an
 // error rather than merely printing a warning and continuing.
 #ifdef LIB_SMCTRL_WINDOWS
@@ -80,6 +67,16 @@ static void win_abort(int ret, int err, const char* file, int line, const char* 
 #define abort(ret, errno, ...) error_at_line(ret, errno, __FILE__, __LINE__, \
                                              __VA_ARGS__)
 #endif
+
+
+static inline int popcount64(uint64_t x) {
+	#ifdef _MSC_VER
+		return __popcnt64(x);
+	#else
+		return __builtin_popcountl(x);
+	#endif
+}
+
 
 /*** QMD/TMD-based SM Mask Control via Debug Callback. ***/
 
