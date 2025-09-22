@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdatomic.h>
 
 // Platform detection
 #if defined(_WIN32) || defined(_WIN64)
@@ -101,7 +102,7 @@ static __declspec(thread) uint64_t g_next_sm_mask = 0;
 static __thread uint64_t g_next_sm_mask = 0;
 #endif
 // Flag value to indicate if setup has been completed
-static bool sm_control_setup_called = false;
+static atomic_bool sm_control_setup_called = ATOMIC_VAR_INIT(false);
 
 // v1 has been removed---it intercepted the TMD/QMD too early, making it
 // impossible to override the CUDA-injected stream mask with the next mask.
@@ -164,7 +165,7 @@ static void setup_sm_control_callback() {
 	uintptr_t* tbl_base;
 	uint32_t my_hndl;
 	// Avoid race conditions (setup should only run once)
-	if (__atomic_test_and_set(&sm_control_setup_called, __ATOMIC_SEQ_CST))
+	if (atomic_exchange(&sm_control_setup_called, true))
 		return;
 
 #if CUDA_VERSION <= 6050
