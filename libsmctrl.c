@@ -435,7 +435,7 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 	*num_enabled_gpcs = 0;
 	// Maximum number of GPCs supported for this chip
 	snprintf(filename, 100, "/proc/gpu%d/num_gpcs", dev);
-	if (err = read_int_procfile(filename, &max_gpcs)) {
+	if ((err = read_int_procfile(filename, &max_gpcs))) {
 		fprintf(stderr, "libsmctrl: nvdebug module must be loaded into kernel before "
 				"using libsmctrl_get_*_info() functions\n");
 		return err;
@@ -447,10 +447,10 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 	}
 	// Set bit = disabled GPC
 	snprintf(filename, 100, "/proc/gpu%d/gpc_mask", dev);
-	if (err = read_int_procfile(filename, &gpc_mask))
+	if ((err = read_int_procfile(filename, &gpc_mask)))
 		return err;
 	snprintf(filename, 100, "/proc/gpu%d/num_tpc_per_gpc", dev);
-	if (err = read_int_procfile(filename, &num_tpc_per_gpc))
+	if ((err = read_int_procfile(filename, &num_tpc_per_gpc)))
 		return err;
 	// For each enabled GPC
 	for (i = 0; i < max_gpcs; i++) {
@@ -461,7 +461,7 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 		// Get the bitstring of TPCs disabled for this GPC
 		// Set bit = disabled TPC
 		snprintf(filename, 100, "/proc/gpu%d/gpc%d_tpc_mask", dev, i);
-		if (err = read_int_procfile(filename, &gpc_tpc_mask))
+		if ((err = read_int_procfile(filename, &gpc_tpc_mask)))
 			return err;
 		uint64_t* tpc_mask = &tpc_mask_per_gpc_per_dev[dev][*num_enabled_gpcs - 1];
 		*tpc_mask = 0;
@@ -481,7 +481,7 @@ int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev) {
 	uint32_t num_gpcs;
 	uint64_t* tpcs_per_gpc;
 	int res;
-	if (res = libsmctrl_get_gpc_info(&num_gpcs, &tpcs_per_gpc, dev))
+	if ((res = libsmctrl_get_gpc_info(&num_gpcs, &tpcs_per_gpc, dev)))
 		return res;
 	*num_tpcs = 0;
 	for (int gpc = 0; gpc < num_gpcs; gpc++) {
