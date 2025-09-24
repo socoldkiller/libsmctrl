@@ -9,7 +9,15 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#ifdef _WIN32
+// Windows doesn't support __int128, use a struct instead
+typedef struct {
+    uint64_t low;
+    uint64_t high;
+} uint128_t;
+#else
 typedef unsigned __int128 uint128_t;
+#endif
 
 /* PARTITIONING FUNCTIONS */
 

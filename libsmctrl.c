@@ -29,7 +29,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <stdatomic.h>
+#endif
 
 // Platform detection
 #if defined(_WIN32) || defined(_WIN64)
@@ -99,7 +103,11 @@ static __declspec(thread) uint64_t g_next_sm_mask = 0;
 static __thread uint64_t g_next_sm_mask = 0;
 #endif
 // Flag value to indicate if setup has been completed
+#ifdef _WIN32
+static volatile LONG sm_control_setup_called = 0;
+#else
 static atomic_bool sm_control_setup_called = ATOMIC_VAR_INIT(false);
+#endif
 
 // v1 has been removed---it intercepted the TMD/QMD too early, making it
 // impossible to override the CUDA-injected stream mask with the next mask.
@@ -112,30 +120,30 @@ static void control_callback_v2(void *ukwn, int domain, int cbid, const void *in
 	// The fourth 8-byte element in `in_params` is a pointer to the TMD. Note
 	// that this fourth pointer must exist---it only exists when the first
 	// 8-byte element of `in_params` is at least 0x28 (checked above).
-	void* tmd = *((void**)in_params + 4);
+	void* tmd = *((void**)((char*)in_params + 4 * sizeof(void*)));
 	if (!tmd)
 		abort(1, 0, "TMD allocation appears NULL; likely forward-compatibilty issue.\n");
 
 	uint32_t *lower_ptr, *upper_ptr;
 
 	// The location of the TMD version field seems consistent across versions
-	uint8_t tmd_ver = *(uint8_t*)(tmd + 72);
+	uint8_t tmd_ver = *(uint8_t*)((char*)tmd + 72);
 
 	if (tmd_ver >= 0x40) {
 		// TMD V04_00 is used starting with Hopper to support masking >64 TPCs
-		lower_ptr = tmd + 304;
-		upper_ptr = tmd + 308;
+		lower_ptr = (uint32_t*)((char*)tmd + 304);
+		upper_ptr = (uint32_t*)((char*)tmd + 308);
 		// XXX: Disable upper 64 TPCs until we have ...next_mask_ext and
 		//      ...global_mask_ext
-		*(uint32_t*)(tmd + 312) = -1;
-		*(uint32_t*)(tmd + 316) = -1;
+		*(uint32_t*)((char*)tmd + 312) = -1;
+		*(uint32_t*)((char*)tmd + 316) = -1;
 		// An enable bit is also required
 		*(uint32_t*)tmd |= 0x80000000;
 	} else if (tmd_ver >= 0x16) {
 		// TMD V01_06 is used starting with Kepler V2, and is the first to
 		// support TPC masking
-		lower_ptr = tmd + 84;
-		upper_ptr = tmd + 88;
+		lower_ptr = (uint32_t*)((char*)tmd + 84);
+		upper_ptr = (uint32_t*)((char*)tmd + 88);
 	} else {
 		// TMD V00_06 is documented to not support SM masking
 		abort(1, 0, "TMD version %04o is too old! This GPU does not support SM masking.\n", tmd_ver);
@@ -162,8 +170,13 @@ static void setup_sm_control_callback() {
 	uintptr_t* tbl_base;
 	uint32_t my_hndl;
 	// Avoid race conditions (setup should only run once)
+#ifdef _WIN32
+	if (InterlockedExchange(&sm_control_setup_called, 1) != 0)
+		return;
+#else
 	if (atomic_exchange(&sm_control_setup_called, true))
 		return;
+#endif
 
 #if CUDA_VERSION <= 6050
 	// Verify supported CUDA version
@@ -181,8 +194,14 @@ static void setup_sm_control_callback() {
 	cuGetExportTable((const void**)&tbl_base, &callback_funcs_id);
 	uintptr_t subscribe_func_addr = *(tbl_base + 3);
 	uintptr_t enable_func_addr = *(tbl_base + 6);
+#ifdef _WIN32
+	// MSVC doesn't support typeof, use function pointer casting
+	subscribe = (int (*)(uint32_t*, void(*)(void*, int, int, const void*), void*))subscribe_func_addr;
+	enable = (int (*)(uint32_t, uint32_t, int, int))enable_func_addr;
+#else
 	subscribe = (typeof(subscribe))subscribe_func_addr;
 	enable = (typeof(enable))enable_func_addr;
+#endif
 	int res = 0;
 	res = subscribe(&my_hndl, control_callback_v2, NULL);
 	if (res)
@@ -241,6 +260,7 @@ void libsmctrl_set_next_mask(uint64_t mask) {
 // CUDA 12.5 and 12.6 use the same offset
 // 12.5 tested on 555.58.02
 // 12.6 tested on 560.35.03
+#define CU_12_6_MASK_OFF 0x4ec  // Same as 12.5
 #define CU_12_7_MASK_OFF 0x4fc
 // CUDA 12.7 and 12.8 use the same offset
 // 12.7 tested on 565.77
@@ -308,9 +328,16 @@ int detect_parker_soc() {
 // our header
 void libsmctrl_set_stream_mask(void* stream, uint64_t mask) {
 	// When the old API is used on GPUs with over 64 TPCs, disable all TPCs >64
-	uint128_t full_mask = -1;
+	uint128_t full_mask;
+#ifdef _WIN32
+	// MSVC doesn't support bit operations on structs
+	full_mask.low = mask;
+	full_mask.high = (uint64_t)-1;  // Set all high bits to 1
+#else
+	full_mask = -1;
 	full_mask <<= 64;
 	full_mask |= mask;
+#endif
 	libsmctrl_set_stream_mask_ext(stream, full_mask);
 }
 
@@ -321,7 +348,7 @@ void libsmctrl_set_stream_mask_ext(void* stream, uint128_t mask) {
 	int ver;
 	cuDriverGetVersion(&ver);
 	switch (ver) {
-#if __x86_64__
+#if defined(__x86_64__) || defined(_WIN64)
 	case 8000:
 		hw_mask = (struct stream_sm_mask*)(stream_struct_base + CU_8_0_MASK_OFF);
 	case 9000:
@@ -372,8 +399,10 @@ void libsmctrl_set_stream_mask_ext(void* stream, uint128_t mask) {
 		hw_mask_v2 = (void*)(stream_struct_base + CU_12_4_MASK_OFF);
 		break;
 	case 12050:
-	case 12060:
 		hw_mask_v2 = (void*)(stream_struct_base + CU_12_5_MASK_OFF);
+		break;
+	case 12060:
+		hw_mask_v2 = (void*)(stream_struct_base + CU_12_6_MASK_OFF);
 		break;
 	case 12070:
 	case 12080:
@@ -434,14 +463,28 @@ void libsmctrl_set_stream_mask_ext(void* stream, uint128_t mask) {
 
 	// Mask layout changed with CUDA 12.0 to support large Hopper/Ada GPUs
 	if (hw_mask) {
+#ifdef _WIN32
+		// MSVC: use struct members directly
+		hw_mask->upper = mask.high;
+		hw_mask->lower = mask.low;
+#else
 		hw_mask->upper = mask >> 32;
 		hw_mask->lower = mask;
+#endif
 	} else if (hw_mask_v2) {
 		hw_mask_v2->enabled = 1;
+#ifdef _WIN32
+		// MSVC: use struct members directly
+		hw_mask_v2->mask[0] = mask.low;
+		hw_mask_v2->mask[1] = mask.high;
+		hw_mask_v2->mask[2] = 0;  // For GPUs with >64 TPCs, these would need to be set
+		hw_mask_v2->mask[3] = 0;  // For GPUs with >64 TPCs, these would need to be set
+#else
 		hw_mask_v2->mask[0] = mask;
 		hw_mask_v2->mask[1] = mask >> 32;
 		hw_mask_v2->mask[2] = mask >> 64;
 		hw_mask_v2->mask[3] = mask >> 96;
+#endif
 	} else {
 		abort(1, 0, "Stream masking unsupported on this CUDA version (%d), and"
 		            " no fallback MASK_OFF set!", ver);
@@ -648,7 +691,17 @@ void libsmctrl_cleanup_symlinks() {
 }
 
 // Register cleanup function to run at program exit
+#ifdef _WIN32
+// MSVC doesn't support __attribute__((constructor)), use DllMain instead
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+        atexit(libsmctrl_cleanup_symlinks);
+    }
+    return TRUE;
+}
+#else
 __attribute__((constructor))
 static void register_cleanup() {
 	atexit(libsmctrl_cleanup_symlinks);
 }
+#endif

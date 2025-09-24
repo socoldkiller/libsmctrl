@@ -3,18 +3,33 @@ project(libsmctrl LANGUAGES C CUDA)
 
 # Set CUDA path if not set
 if(NOT DEFINED ENV{CUDA_HOME})
-    set(CUDA_HOME "/usr/local/cuda")
+    if(WIN32)
+        # Windows default CUDA path
+        set(CUDA_HOME "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6")
+    else()
+        # Linux default CUDA path
+        set(CUDA_HOME "/usr/local/cuda")
+    endif()
 else()
     set(CUDA_HOME $ENV{CUDA_HOME})
 endif()
 
 # Set compiler flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -O0")
+if(WIN32)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Zi /Od /std:c11")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -O0")
+else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0 -std=c11")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -O0")
+endif()
 
 # Include directories
 include_directories(${CUDA_HOME}/include)
-link_directories(${CUDA_HOME}/lib64)
+if(WIN32)
+    link_directories(${CUDA_HOME}/lib/x64)
+else()
+    link_directories(${CUDA_HOME}/lib64)
+endif()
 
 # ----- Main Library -----
 # Shared library
