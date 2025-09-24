@@ -1,0 +1,21 @@
+CompileFlags:
+  Add: 
+    - -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include
+    - -I.
+    - -xc
+    - -std=c11
+    - -D_WIN32
+    - -D_DEBUG
+    - -DDEBUG
+    - -D_CRT_SECURE_NO_WARNINGS
+  CompilationDatabase: .
+CompileFlags:
+  Remove: [-W*, -m*, -f*]
+Diagnostics:
+  Suppress: [unknown-warning-option, unused-command-line-argument]
+If:
+  PathMatch: *.cu
+CompileFlags:
+  Add: 
+    - -xcuda
+    - --cuda-path=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6

@@ -1,0 +1,42 @@
+[
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe /DWIN32 /D_WINDOWS /W3 /MDd /Zi /Ob0 /Od /RTC1 /std:c11 -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_CRT_SECURE_NO_WARNINGS -c D:/code/libsmctrl/libsmctrl.c -o libsmctrl.obj",
+    "file": "D:/code/libsmctrl/libsmctrl.c"
+  },
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/bin/nvcc.exe --use-local-env -ccbin \"C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64\" -x cu -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_WINDOWS -g -O0 -c D:/code/libsmctrl/libsmctrl_test_mask_shared.cu -o libsmctrl_test_mask_shared.obj",
+    "file": "D:/code/libsmctrl/libsmctrl_test_mask_shared.cu"
+  },
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe /DWIN32 /D_WINDOWS /W3 /MDd /Zi /Ob0 /Od /RTC1 /std:c11 -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_CRT_SECURE_NO_WARNINGS -c D:/code/libsmctrl/libsmctrl_test_global_mask.c -o libsmctrl_test_global_mask.obj",
+    "file": "D:/code/libsmctrl/libsmctrl_test_global_mask.c"
+  },
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe /DWIN32 /D_WINDOWS /W3 /MDd /Zi /Ob0 /Od /RTC1 /std:c11 -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_CRT_SECURE_NO_WARNINGS -c D:/code/libsmctrl/libsmctrl_test_gpc_info.c -o libsmctrl_test_gpc_info.obj",
+    "file": "D:/code/libsmctrl/libsmctrl_test_gpc_info.c"
+  },
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe /DWIN32 /D_WINDOWS /W3 /MDd /Zi /Ob0 /Od /RTC1 /std:c11 -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_CRT_SECURE_NO_WARNINGS -c D:/code/libsmctrl/libsmctrl_test_next_mask.c -o libsmctrl_test_next_mask.obj",
+    "file": "D:/code/libsmctrl/libsmctrl_test_next_mask.c"
+  },
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe /DWIN32 /D_WINDOWS /W3 /MDd /Zi /Ob0 /Od /RTC1 /std:c11 -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_CRT_SECURE_NO_WARNINGS -c D:/code/libsmctrl/libsmctrl_test_next_mask_override.c -o libsmctrl_test_next_mask_override.obj",
+    "file": "D:/code/libsmctrl/libsmctrl_test_next_mask_override.c"
+  },
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe /DWIN32 /D_WINDOWS /W3 /MDd /Zi /Ob0 /Od /RTC1 /std:c11 -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_CRT_SECURE_NO_WARNINGS -c D:/code/libsmctrl/libsmctrl_test_stream_mask.c -o libsmctrl_test_stream_mask.obj",
+    "file": "D:/code/libsmctrl/libsmctrl_test_stream_mask.c"
+  },
+  {
+    "directory": "D:/code/libsmctrl/build",
+    "command": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe /DWIN32 /D_WINDOWS /W3 /MDd /Zi /Ob0 /Od /RTC1 /std:c11 -IC:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include -I. -D_CRT_SECURE_NO_WARNINGS -c D:/code/libsmctrl/libsmctrl_test_stream_mask_override.c -o libsmctrl_test_stream_mask_override.obj",
+    "file": "D:/code/libsmctrl/libsmctrl_test_stream_mask_override.c"
+  }
+]

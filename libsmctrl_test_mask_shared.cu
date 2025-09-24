@@ -1,13 +1,50 @@
 // Copyright 2023 Joshua Bakita
-#include <error.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
 #include <cuda_runtime.h>
 
 #include "libsmctrl.h"
 #include "testbench.h"
 #include "libsmctrl_test_mask_shared.h"
+
+// Windows compatibility macros
+#ifdef _WIN32
+#define program_invocation_name "libsmctrl_test"
+static void error(int exit_code, int err, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "%s: ", program_invocation_name);
+    vfprintf(stderr, format, args);
+    if (err) {
+        fprintf(stderr, ": %s", strerror(err));
+    }
+    fprintf(stderr, "\n");
+    va_end(args);
+    exit(exit_code);
+}
+
+static int asprintf(char** strp, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    int size = _vscprintf(format, args) + 1;
+    va_end(args);
+    
+    *strp = (char*)malloc(size);
+    if (*strp == NULL) return -1;
+    
+    va_start(args, format);
+    vsprintf_s(*strp, size, format, args);
+    va_end(args);
+    
+    return size - 1;
+}
+#else
+#include <error.h>
+#endif
 
 __global__ void read_and_store_smid(uint8_t* smid_arr) {
   if (threadIdx.x != 1)
@@ -71,33 +108,49 @@ int test_constrained_size_and_location(enum partitioning_type part_type) {
     return 1;
   }
 
-  // Test at 32-TPC boundaries to verify that the mask is applied in the
-  // correct order to each of the QMD/stream struct fields.
-  char* reason[4] = {0};
-  for (int enabled_tpc = 0; enabled_tpc < num_tpcs && enabled_tpc < 128; enabled_tpc += 32) {
-    uint128_t mask = 1;
-    mask <<= enabled_tpc;
-    mask = ~mask;
+    // Test at 32-TPC boundaries to verify that the mask is applied in the
+    // correct order to each of the QMD/stream struct fields.
+    char* reason[4] = {0};
+    for (int enabled_tpc = 0; enabled_tpc < num_tpcs && enabled_tpc < 128; enabled_tpc += 32) {
+        uint128_t mask;
+        if (enabled_tpc < 64) {
+            mask.low = 1ull << enabled_tpc;
+            mask.high = 0;
+        } else {
+            mask.low = 0;
+            mask.high = 1ull << (enabled_tpc - 64);
+        }
+        // Invert the mask (set bit = disabled TPC)
+        mask.low = ~mask.low;
+        mask.high = ~mask.high;
 
     // Apply partitioning to enable only the first TPC of each 32-bit block
     switch (part_type) {
       case PARTITION_GLOBAL:
-        libsmctrl_set_global_mask(mask);
+        // For global mask, we need to use the low 64 bits only
+        libsmctrl_set_global_mask(mask.low);
         break;
       case PARTITION_STREAM:
         libsmctrl_set_stream_mask_ext(stream, mask);
         break;
       case PARTITION_STREAM_OVERRIDE:
-        libsmctrl_set_global_mask(~mask);
+        // For override, invert the low 64 bits for global mask
+        libsmctrl_set_global_mask(~mask.low);
         libsmctrl_set_stream_mask_ext(stream, mask);
         break;
       case PARTITION_NEXT:
-        libsmctrl_set_next_mask(mask);
+        // For next mask, we need to use the low 64 bits only
+        libsmctrl_set_next_mask(mask.low);
         break;
       case PARTITION_NEXT_OVERRIDE:
-        libsmctrl_set_global_mask(~mask);
-        libsmctrl_set_stream_mask_ext(stream, ~mask);
-        libsmctrl_set_next_mask(mask);
+        // For override, invert the low 64 bits for global and stream masks
+        libsmctrl_set_global_mask(~mask.low);
+        // Create a temporary inverted mask for stream
+        uint128_t inverted_mask;
+        inverted_mask.low = ~mask.low;
+        inverted_mask.high = ~mask.high;
+        libsmctrl_set_stream_mask_ext(stream, inverted_mask);
+        libsmctrl_set_next_mask(mask.low);
         break;
       default:
         error(1, 0, "Shared test core called with unrecognized partitioning type.");
@@ -146,4 +199,3 @@ int test_constrained_size_and_location(enum partitioning_type part_type) {
     printf("%s: Reason %d: %s\n", program_invocation_name, i + 1, reason[i]);
   return 0;
 }
-
