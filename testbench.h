@@ -3,7 +3,13 @@
  */
 
 // cudaError_t and CUResult can both safely be cast to an unsigned int
+#ifdef __CUDACC__
+// For CUDA compilation, use a simple global variable (thread-local not needed for error checking)
+static unsigned int __SAFE_err;
+#else
+// For regular C compilation, use standard thread-local storage
 static __thread unsigned int __SAFE_err;
+#endif
 
 // The very strange cast in these macros is to satisfy two goals at tension:
 // 1. This file should be able to be included in non-CUDA-using files, and thus

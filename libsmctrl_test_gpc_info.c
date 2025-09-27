@@ -1,6 +1,11 @@
 // Copyright 2024 Joshua Bakita
+#ifdef _WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <windows.h>
+#else
 #define _GNU_SOURCE
 #include <error.h>
+#endif
 #include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -8,6 +13,37 @@
 #include <string.h>
 
 #include "libsmctrl.h"
+
+// Windows compatibility
+#ifdef _WIN32
+static const char* program_invocation_name = "libsmctrl_test_gpc_info";
+
+static void error(int exit_code, int err, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "%s: ", program_invocation_name);
+    vfprintf(stderr, format, args);
+    if (err) {
+        char buffer[256];
+        if (strerror_s(buffer, sizeof(buffer), err) == 0) {
+            fprintf(stderr, ": %s", buffer);
+        } else {
+            fprintf(stderr, ": error %d", err);
+        }
+    }
+    fprintf(stderr, "\n");
+    va_end(args);
+    exit(exit_code);
+}
+
+static int popcountl(uint64_t x) {
+    return __popcnt64(x);
+}
+#else
+static int popcountl(uint64_t x) {
+    return __builtin_popcountl(x);
+}
+#endif
 
 int main(int argc, char** argv) {
 	uint32_t num_gpcs = 0, num_tpcs = 0;
@@ -27,8 +63,8 @@ int main(int argc, char** argv) {
 		error(1, res, "libsmctrl_get_gpc_info() failed");
 	printf("%s: GPU%d has %d enabled GPCs.\n", program_invocation_name, gpu_id, num_gpcs);
 	for (int i = 0; i < num_gpcs; i++) {
-		num_tpcs += __builtin_popcountl(masks[i]);
-		printf("%s: Mask of %d TPCs associated with GPC %d: %#018lx\n", program_invocation_name, __builtin_popcountl(masks[i]), i, masks[i]);
+		num_tpcs += popcountl(masks[i]);
+		printf("%s: Mask of %d TPCs associated with GPC %d: %#018lx\n", program_invocation_name, popcountl(masks[i]), i, masks[i]);
 	}
 	printf("%s: Total of %u enabled TPCs.\n", program_invocation_name, num_tpcs);
 	return 0;

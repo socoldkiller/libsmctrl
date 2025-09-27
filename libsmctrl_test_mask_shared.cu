@@ -1,4 +1,10 @@
 // Copyright 2023 Joshua Bakita
+#ifdef _WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <windows.h>
+#else
+#include <error.h>
+#endif
 #include <errno.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -13,14 +19,20 @@
 
 // Windows compatibility macros
 #ifdef _WIN32
-#define program_invocation_name "libsmctrl_test"
+static const char* program_invocation_name = "libsmctrl_test";
+
 static void error(int exit_code, int err, const char* format, ...) {
     va_list args;
     va_start(args, format);
     fprintf(stderr, "%s: ", program_invocation_name);
     vfprintf(stderr, format, args);
     if (err) {
-        fprintf(stderr, ": %s", strerror(err));
+        char buffer[256];
+        if (strerror_s(buffer, sizeof(buffer), err) == 0) {
+            fprintf(stderr, ": %s", buffer);
+        } else {
+            fprintf(stderr, ": error %d", err);
+        }
     }
     fprintf(stderr, "\n");
     va_end(args);
@@ -33,6 +45,8 @@ static int asprintf(char** strp, const char* format, ...) {
     int size = _vscprintf(format, args) + 1;
     va_end(args);
     
+    if (size <= 0) return -1;
+    
     *strp = (char*)malloc(size);
     if (*strp == NULL) return -1;
     
@@ -43,7 +57,13 @@ static int asprintf(char** strp, const char* format, ...) {
     return size - 1;
 }
 #else
-#include <error.h>
+static int asprintf(char** strp, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    int result = vasprintf(strp, format, args);
+    va_end(args);
+    return result;
+}
 #endif
 
 __global__ void read_and_store_smid(uint8_t* smid_arr) {
